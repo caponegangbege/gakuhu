@@ -76,36 +76,27 @@
   /* 色付き丸 */
   .note {
     width: 36px;
-    height: 36px;
+    height: 32px; /* 楕円形に変更 */
     border-radius: 50%;
     display: flex;
     justify-content: center;
     align-items: center;
     color: #333;
     font-weight: bold;
-    font-size: 1rem;
+    font-size: 0.9rem; /* 少し文字を小さく */
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    border: 2px solid white; /* 五線譜を隠す白フチ */
+    background-clip: padding-box;
     position: relative;
     z-index: 2;
-  }
-
-  /* 下の音符記号 */
-  .note-symbol {
-    position: absolute;
-    top: 25px; /* 丸の下から棒が伸びる位置 */
-    left: 20px;
-    font-size: 1.8rem;
-    line-height: 1;
-    color: #333;
-    z-index: 1;
   }
 
   /* ドの加線（短い横線） */
   .ledger-line {
     position: absolute;
-    width: 160%;
-    height: 3px;
-    background-color: #333;
+    width: 44px; /* 幅を広めに */
+    height: 2px; /* 太さを調整 */
+    background-color: rgba(0, 0, 0, 0.3); /* 五線譜より少し濃く */
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -165,14 +156,14 @@
   // 音符の定義（色と縦位置）
   // bottomは下からの絶対ピクセル位置
   const notesDef = {
-    '高いド': { color: '#ff4d4d', bottom: '150px', name: 'ド' },
-    'シb': { color: '#ff66b2', bottom: '135px', name: 'シb' },
-    'ラ': { color: '#cc33ff', bottom: '120px', name: 'ラ' },
-    'ソ': { color: '#3385ff', bottom: '105px', name: 'ソ' },
-    'ファ': { color: '#33cc33', bottom: '90px', name: 'ファ' },
-    'ミ': { color: '#ffff33', bottom: '75px', name: 'ミ' },
-    'レ': { color: '#ff9933', bottom: '60px', name: 'レ' },
-    'ド': { color: '#ff4d4d', bottom: '45px', name: 'ド', ledger: true } // 加線あり
+    '高いド': { color: '#ff4d4d', bottom: '128px', name: 'ド' },
+    'シb': { color: '#ff66b2', bottom: '112px', name: 'シb' },
+    'ラ': { color: '#cc33ff', bottom: '96px', name: 'ラ' },
+    'ソ': { color: '#3385ff', bottom: '80px', name: 'ソ' },
+    'ファ': { color: '#33cc33', bottom: '64px', name: 'ファ' },
+    'ミ': { color: '#ffff33', bottom: '48px', name: 'ミ' },
+    'レ': { color: '#ff9933', bottom: '32px', name: 'レ' },
+    'ド': { color: '#ff4d4d', bottom: '16px', name: 'ド', ledger: true } // 加線あり
   };
 
   // 譜面データ (1小節 = 4拍)
@@ -304,8 +295,8 @@
       // 五線譜の描画
       const staffLines = document.createElement('div');
       staffLines.className = 'staff-lines';
-      // 下から 第1線(ミ:93px), 第2線(ソ:123px), 第3線(シ:153px), 第4線(レ:183px), 第5線(ファ:213px)
-      [93, 123, 153, 183, 213].forEach(bottomPos => {
+      // 下から 第1線:48px, 第2線:80px, 第3線:112px, 第4線:144px, 第5線:176px
+      [48, 80, 112, 144, 176].forEach(bottomPos => {
         const line = document.createElement('div');
         line.className = 'staff-line';
         line.style.bottom = bottomPos + 'px';
@@ -349,14 +340,8 @@
             noteEl.appendChild(ledger);
           }
 
-          // 音符記号（♩）
-          const symbolEl = document.createElement('div');
-          symbolEl.className = 'note-symbol';
-          symbolEl.textContent = '♩';
-
           wrapper.appendChild(marker);
           wrapper.appendChild(noteEl);
-          wrapper.appendChild(symbolEl);
           beatBox.appendChild(wrapper);
         }
         
