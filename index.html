@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>デジタル楽譜（9〜24小節）</title>
+<style>
+  body {
+    margin: 0;
+    padding: 20px;
+    background-color: #f8f9fa;
+    font-family: sans-serif;
+    touch-action: manipulation;
+    user-select: none;
+    height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* 4小節×2段のグリッド */
+  #scoreArea {
+    flex-grow: 1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 15px;
+    height: 100%;
+  }
+
+  .measure-box {
+    position: relative;
+    background-color: #fff;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    display: flex; /* 4拍を均等に並べる */
+    box-sizing: border-box;
+    /* はみ出しを許容して記号が切れないように overflow: hidden を削除 */
+  }
+
+  /* 五線譜の背景（ウォーターマーク） */
+  .staff-lines {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .staff-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background-color: rgba(0, 0, 0, 0.15); /* 極薄いグレー */
+  }
+
+  /* 1拍（グリッド）の枠 */
+  .beat-box {
+    flex: 1;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    height: 100%;
+    z-index: 2;
+  }
+
+  /* 音符を包むコンテナ（下からの絶対位置） */
+  .note-wrapper {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    /* bottomはJavaScriptで設定（音の高さ） */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* 色付き丸 */
+  .note {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #333;
+    font-weight: bold;
+    font-size: 1rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    position: relative;
+    z-index: 2;
+  }
+
+  /* 下の音符記号 */
+  .note-symbol {
+    position: absolute;
+    top: 25px; /* 丸の下から棒が伸びる位置 */
+    left: 20px;
+    font-size: 1.8rem;
+    line-height: 1;
+    color: #333;
+    z-index: 1;
+  }
+
+  /* ドの加線（短い横線） */
+  .ledger-line {
+    position: absolute;
+    width: 160%;
+    height: 3px;
+    background-color: #333;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: -1;
+  }
+
+  /* バウンシングマーカー（カラオケ矢印） */
+  .marker {
+    position: absolute;
+    top: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1.8rem;
+    color: #ff3333;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  /* アクティブな拍のスタイル */
+  .beat-box.active .marker {
+    opacity: 1;
+    animation: bounce 0.5s infinite alternate ease-in-out;
+  }
+  .beat-box.active .note {
+    border: 3px solid #333;
+    transform: scale(1.2);
+    transition: transform 0.2s ease;
+  }
+
+  @keyframes bounce {
+    0% { transform: translateX(-50%) translateY(0); }
+    100% { transform: translateX(-50%) translateY(-15px); }
+  }
+
+  /* ナビゲーションと情報 */
+  #bottomBar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 10px;
+    font-size: 1.2rem;
+    color: #666;
+  }
+</style>
+</head>
+<body>
+
+<div id="scoreArea">
+  <!-- JavaScriptでページを描画 -->
+</div>
+<div id="bottomBar">
+  <div id="pageInfo">Page: 1</div>
+  <div id="guideText">画面のどこかをタップして次へ進む</div>
+</div>
+
+<script>
+  // 音符の定義（色と縦位置）
+  // bottomは下からの絶対ピクセル位置
+  const notesDef = {
+    '高いド': { color: '#ff4d4d', bottom: '150px', name: 'ド' },
+    'シb': { color: '#ff66b2', bottom: '135px', name: 'シb' },
+    'ラ': { color: '#cc33ff', bottom: '120px', name: 'ラ' },
+    'ソ': { color: '#3385ff', bottom: '105px', name: 'ソ' },
+    'ファ': { color: '#33cc33', bottom: '90px', name: 'ファ' },
+    'ミ': { color: '#ffff33', bottom: '75px', name: 'ミ' },
+    'レ': { color: '#ff9933', bottom: '60px', name: 'レ' },
+    'ド': { color: '#ff4d4d', bottom: '45px', name: 'ド', ledger: true } // 加線あり
+  };
+
+  // 譜面データ (1小節 = 4拍)
+  const scoreData = [
+    // === 1ページ目 ===
+    // 第9小節
+    [null, null, null, null],
+    // 第10小節
+    [null, '高いド', null, null],
+    // 第11小節
+    [null, null, 'ラ', null],
+    // 第12小節
+    [null, null, 'シb', null],
+    // 第13小節
+    ['レ', null, 'ド', null],
+    // 第14小節
+    ['ド', null, null, null],
+    // 第15小節
+    [null, null, 'ラ', null],
+    // 第16小節
+    [null, null, 'シb', null],
+
+    // === 2ページ目 ===
+    // 第17小節
+    ['レ', null, 'ド', null],
+    // 第18小節
+    ['ド', 'ド', 'ド', 'ド'],
+    // 第19小節
+    ['ファ', 'ファ', 'ソ', 'ソ'],
+    // 第20小節
+    ['ラ', null, null, null],
+    // 第21小節
+    ['シb', 'シb', 'ド', 'ド'],
+    // 第22小節
+    ['ファ', 'ファ', 'ファ', 'ファ'],
+    // 第23小節
+    ['シb', null, null, null],
+    // 第24小節
+    ['ラ', 'ラ', 'ソ', 'ソ'],
+
+    // === 3ページ目 ===
+    // 第25小節
+    ['高いド', null, null, null],
+    // 第26小節
+    ['ラ', null, 'ソ', null],
+    // 第27小節
+    ['ファ', null, 'ミ', null],
+    // 第28小節
+    ['ラ', null, '高いド', null],
+    // 第29小節
+    ['ファ', null, 'ラ', null],
+    // 第30小節
+    ['ミ', null, 'シb', null],
+    // 第31小節
+    ['ミ', null, 'ラ', null],
+    // 第32小節
+    ['ソ', 'ラ', 'シb', '高いド'],
+
+    // === 4ページ目 ===
+    // 第33小節
+    ['シb', 'ラ', 'ソ', 'ソ'],
+    // 第34小節
+    ['ド', null, 'ド', null],
+    // 第35小節
+    ['ファ', null, 'ファ', null],
+    // 第36小節
+    ['ラ', null, 'ラ', null],
+    // 第37小節
+    ['シb', null, 'ド', null],
+    // 第38小節
+    ['ファ', null, 'ファ', null],
+    // 第39小節
+    ['シb', null, 'シb', null],
+    // 第40小節
+    ['ラ', 'ラ', 'ソ', null],
+
+    // === 5ページ目 ===
+    // 第41小節
+    ['ド', null, null, null],
+    // 第42小節
+    ['ド', null, null, null],
+    // 第43小節
+    ['ド', null, null, null],
+    // 第44小節
+    ['ド', null, null, null],
+    // 第45小節
+    [null, null, null, null],
+    // 第46小節
+    [null, null, null, null],
+    // 第47小節
+    [null, null, null, null],
+    // 第48小節
+    [null, null, null, null]
+  ];
+
+  const MEASURES_PER_PAGE = 8;
+  const scoreArea = document.getElementById('scoreArea');
+  const pageInfo = document.getElementById('pageInfo');
+  
+  // 進行管理のためのフラットな配列を作成
+  const playableNotes = [];
+  scoreData.forEach((measure, mIndex) => {
+    const pageIndex = Math.floor(mIndex / MEASURES_PER_PAGE);
+    measure.forEach((noteKey, bIndex) => {
+      if (noteKey) {
+        playableNotes.push({
+          page: pageIndex,
+          measure: mIndex,
+          beat: bIndex,
+          key: noteKey
+        });
+      }
+    });
+  });
+
+  let currentPlayIndex = 0; //playableNotesのインデックス
+  let currentPage = -1; // 現在描画されているページ
+
+  // 指定したページを描画する関数
+  function renderPage(pageIndex) {
+    scoreArea.innerHTML = ''; // 画面クリア
+    const startMeasure = pageIndex * MEASURES_PER_PAGE;
+    const endMeasure = Math.min(startMeasure + MEASURES_PER_PAGE, scoreData.length);
+
+    for (let m = startMeasure; m < endMeasure; m++) {
+      const measureBox = document.createElement('div');
+      measureBox.className = 'measure-box';
+      
+      // 五線譜の描画
+      const staffLines = document.createElement('div');
+      staffLines.className = 'staff-lines';
+      // 下から 第1線(ミ:93px), 第2線(ソ:123px), 第3線(シ:153px), 第4線(レ:183px), 第5線(ファ:213px)
+      [93, 123, 153, 183, 213].forEach(bottomPos => {
+        const line = document.createElement('div');
+        line.className = 'staff-line';
+        line.style.bottom = bottomPos + 'px';
+        staffLines.appendChild(line);
+      });
+      measureBox.appendChild(staffLines);
+
+      // 拍の描画
+      scoreData[m].forEach((noteKey, bIndex) => {
+        const beatBox = document.createElement('div');
+        beatBox.className = 'beat-box';
+        
+        // フラットインデックスを特定してデータ属性に持たせる
+        const flatIdx = playableNotes.findIndex(n => n.measure === m && n.beat === bIndex);
+        if (flatIdx !== -1) {
+          beatBox.dataset.flatIndex = flatIdx;
+        }
+
+        if (noteKey) {
+          const def = notesDef[noteKey];
+          
+          const wrapper = document.createElement('div');
+          wrapper.className = 'note-wrapper';
+          wrapper.style.bottom = def.bottom;
+
+          // バウンシングマーカー
+          const marker = document.createElement('div');
+          marker.className = 'marker';
+          marker.textContent = '▼';
+          
+          // 丸い音符
+          const noteEl = document.createElement('div');
+          noteEl.className = 'note';
+          noteEl.style.backgroundColor = def.color;
+          noteEl.textContent = def.name;
+
+          // ドの加線
+          if (def.ledger) {
+            const ledger = document.createElement('div');
+            ledger.className = 'ledger-line';
+            noteEl.appendChild(ledger);
+          }
+
+          // 音符記号（♩）
+          const symbolEl = document.createElement('div');
+          symbolEl.className = 'note-symbol';
+          symbolEl.textContent = '♩';
+
+          wrapper.appendChild(marker);
+          wrapper.appendChild(noteEl);
+          wrapper.appendChild(symbolEl);
+          beatBox.appendChild(wrapper);
+        }
+        
+        measureBox.appendChild(beatBox);
+      });
+      scoreArea.appendChild(measureBox);
+    }
+    
+    currentPage = pageIndex;
+    pageInfo.textContent = `Page: ${currentPage + 1}`;
+  }
+
+  // マーカーの位置を更新する関数
+  function updateActiveNote() {
+    if (playableNotes.length === 0) return;
+    
+    // 最後に到達したら最初に戻る
+    if (currentPlayIndex >= playableNotes.length) {
+      currentPlayIndex = 0;
+    }
+
+    const currentNoteData = playableNotes[currentPlayIndex];
+    
+    // ページ遷移が必要かチェック
+    if (currentNoteData.page !== currentPage) {
+      renderPage(currentNoteData.page);
+    }
+
+    // すべてのアクティブ状態を解除
+    document.querySelectorAll('.beat-box.active').forEach(el => {
+      el.classList.remove('active');
+    });
+
+    // 現在の音符をアクティブに
+    const targetBeat = document.querySelector(`.beat-box[data-flat-index="${currentPlayIndex}"]`);
+    if (targetBeat) {
+      targetBeat.classList.add('active');
+    }
+  }
+
+  // 画面タップ・クリックで進行
+  const advance = (e) => {
+    e.preventDefault();
+    currentPlayIndex++;
+    updateActiveNote();
+  };
+
+  document.body.addEventListener('mousedown', advance);
+  document.body.addEventListener('touchstart', advance, { passive: false });
+
+  // 初期化（1ページ目を描画して最初の音符をアクティブに）
+  if (playableNotes.length > 0) {
+    updateActiveNote();
+  }
+
+</script>
+</body>
+</html>
